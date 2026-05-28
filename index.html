@@ -81,8 +81,8 @@
     <script>
         // CLIENT CONFIGURATION (HIER DEINE DATEN EINTRAGEN!)
         const CLIENT_ID = '399684039736-kiua91h493q6mb4toda59vv67grqarrg.apps.googleusercontent.com';
-        const REDIRECT_URI = window.location.href.split('#')[0]; // Leitet zurück auf diese Seite
-        const SCOPES = 'https://www.googleapis.com/auth/drive.file'; // Erlaubt Zugriff nur auf Dateien, die diese App erstellt hat
+        const REDIRECT_URI = window.location.href.split('#')[0]; 
+        const SCOPES = 'https://www.googleapis.com/auth/drive.file'; 
 
         let accessToken = null;
         let currentFolderId = null;
@@ -109,7 +109,6 @@
                 appContent.classList.remove('hidden');
                 statusDiv.innerText = "Erfolgreich mit Google Drive verbunden.";
                 loadProjects();
-                // Bereinige die URL-Leiste
                 window.history.replaceState({}, document.title, window.location.pathname);
             }
         }
@@ -119,25 +118,36 @@
             window.location.href = authUrl;
         });
 
-        // 2. PROJEKTE (ORDNER) AUS DRIVE LADEN
+        // 2. PROJEKTE (ORDNER) AUS DRIVE LADEN (Hier bereinigt)
         async function loadProjects() {
             statusDiv.innerText = "Lade Projekte...";
             try {
-                const response = await fetch(`https://www.googleapis.com/drive/v3/files?q=mimeType='application/vnd.google-apps.folder' and trashed=false&fields=files(id, name)&accessToken=${accessToken}`, {
+                // Bereinigter API-Call ohne doppelten Token-Parameter
+                const response = await fetch(`https://www.googleapis.com/drive/v3/files?q=mimeType='application/vnd.google-apps.folder' and trashed=false&fields=files(id, name)`, {
                     headers: { 'Authorization': `Bearer ${accessToken}` }
                 });
                 const data = await response.json();
                 
                 projectSelect.innerHTML = '<option value="">-- Bitte wählen --</option>';
-                data.files.forEach(folder => {
-                    const opt = document.createElement('option');
-                    opt.value = folder.id;
-                    opt.innerText = folder.name;
-                    projectSelect.appendChild(opt);
-                });
-                statusDiv.innerText = "Projekte geladen.";
+                if (data.files && data.files.length > 0) {
+                    data.files.forEach(folder => {
+                        const opt = document.createElement('option');
+                        opt.value = folder.id;
+                        opt.innerText = folder.name;
+                        projectSelect.appendChild(opt);
+                    });
+                    
+                    // Falls vorher schon ein Projekt aktiv war, wähle es wieder aus
+                    if (currentFolderId) {
+                        projectSelect.value = currentFolderId;
+                    }
+                    statusDiv.innerText = currentFolderId ? "Projekte geladen. Aktuelles Projekt aktiv." : "Projekte geladen. Bitte wählen.";
+                } else {
+                    statusDiv.innerText = "Keine Projekte in Google Drive gefunden. Erstelle eins!";
+                }
             } catch (err) {
                 statusDiv.innerText = "Fehler beim Laden der Projekte.";
+                console.error(err);
             }
         }
 
@@ -161,12 +171,17 @@
                 });
                 const folder = await response.json();
                 newProjectInput.value = "";
-                await loadProjects();
-                projectSelect.value = folder.id;
+                
+                // Wichtig: Zuerst die ID global setzen, damit die App sie nicht vergisst
                 currentFolderId = folder.id;
+                
+                // Projekte neu laden und Dropdown aktualisieren
+                await loadProjects();
+                
                 statusDiv.innerText = `Projekt "${name}" aktiv.`;
             } catch (err) {
                 statusDiv.innerText = "Fehler beim Erstellen des Ordners.";
+                console.error(err);
             }
         });
 
@@ -183,7 +198,7 @@
             return `${prefix}_${timeStr}.${extension}`;
         }
 
-        // 4. DATEI ZU GOOGLE DRIVE HOCHLADEN (Multipart Upload)
+        // 4. DATEI ZU GOOGLE DRIVE HOCHLADEN
         async function uploadToDrive(blob, filename, mimeType) {
             if (!currentFolderId) {
                 alert("Bitte wähle zuerst ein Projekt aus!");
@@ -214,6 +229,7 @@
                 }
             } catch (err) {
                 statusDiv.innerText = "Netzwerkfehler beim Upload.";
+                console.error(err);
             }
         }
 
@@ -232,17 +248,15 @@
             uploadToDrive(file, name, file.type);
         });
 
-        // 6. SPRACHNACHRICHT-LOGIK (Web Audio API)
+        // 6. SPRACHNACHRICHT-LOGIK
         audioBtn.addEventListener('click', async () => {
             if (!currentFolderId) return alert("Bitte zuerst ein Projekt wählen!");
 
-            // Wenn Aufnahme läuft -> Stoppen
             if (mediaRecorder && mediaRecorder.state === "recording") {
                 mediaRecorder.stop();
                 return;
             }
 
-            // Aufnahme starten
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
                 mediaRecorder = new MediaRecorder(stream);
@@ -256,7 +270,6 @@
                     uploadToDrive(audioBlob, name, 'audio/m4a');
                     audioBtn.innerText = "🎙️ Sprachnachricht starten";
                     audioBtn.style.background = "#2c2c2e";
-                    // Stream stoppen um Batterie zu sparen
                     stream.getTracks().forEach(track => track.stop());
                 };
 
@@ -266,11 +279,12 @@
                 statusDiv.innerText = "Nehme Audio auf...";
             } catch (err) {
                 alert("Mikrofon-Zugriff verweigert oder nicht unterstützt.");
+                console.error(err);
             }
         });
 
-        // Beim Laden prüfen, ob wir aus dem OAuth-Redirect kommen
         window.onload = checkAuth;
     </script>
 </body>
 </html>
+
