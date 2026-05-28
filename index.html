@@ -39,6 +39,7 @@
         button:active { opacity: 0.7; }
         .btn-grid { display: flex; flex-direction: column; gap: 12px; }
         .media-btn { background: #2c2c2e; border: 1px solid #3a3a3c; font-size: 1.1rem; padding: 18px; }
+        .library-btn { background: #007aff; border: 1px solid #0056b3; }
         .hidden { display: none !important; }
         #status { font-size: 0.85rem; color: #00eb87; text-align: center; margin-top: 10px; word-break: break-word; }
     </style>
@@ -72,6 +73,12 @@
                 <input type="file" id="videoInput" accept="video/*" capture="environment" quality="high" class="hidden">
 
                 <button class="media-btn" id="audioBtn">🎙️ Sprachnachricht starten</button>
+
+                <hr style="border-color: #2a2a2a; margin: 5px 0;">
+                <label>Aus Mediathek wählen</label>
+                
+                <button class="media-btn library-btn" onclick="document.getElementById('libraryInput').click()">📂 Aus Bibliothek wählen</button>
+                <input type="file" id="libraryInput" accept="image/*,video/*" multiple class="hidden">
             </div>
         </div>
 
@@ -102,6 +109,7 @@
         const createProjBtn = document.getElementById('createProjBtn');
         const videoBtn = document.getElementById('videoBtn');
         const audioBtn = document.getElementById('audioBtn');
+        const libraryInput = document.getElementById('libraryInput');
 
         // 1. OAUTH HANDSHAKE BEIM LADEN PRÜFEN
         function checkAuth() {
@@ -184,7 +192,7 @@
                     if (currentFolderId) {
                         projectSelect.value = currentFolderId;
                     }
-                    statusDiv.innerText = currentFolderId ? "Projekt aktiv." : "Projekte geladen. Bitte wählen.";
+                    statusDiv.innerText = currentFolderId ? "Projekt active." : "Projekte geladen. Bitte wählen.";
                 } else {
                     statusDiv.innerText = "Keine Projekte in 'Claud.ios' gefunden. Erstelle eins!";
                 }
@@ -311,7 +319,7 @@
             uploadToDrive(file, name, file.type);
         });
 
-        // 6. SPRACHNACHRICHT-LOGIK (Zurück auf m4a für volle Smartphone-Kompatibilität)
+        // 6. SPRACHNACHRICHT-LOGIK
         audioBtn.addEventListener('click', async () => {
             if (!currentFolderId) return alert("Bitte zuerst ein Projekt wählen!");
 
@@ -324,7 +332,6 @@
                 const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
                 audioStartTime = new Date(); 
                 
-                // .m4a (bzw. audio/mp4/webm) wird plattformübergreifend nativ unterstützt
                 mediaRecorder = new MediaRecorder(stream);
                 audioChunks = [];
 
@@ -353,6 +360,39 @@
                 alert("Mikrofon-Zugriff verweigert oder Audio-Format wird nicht unterstützt.");
                 console.error(err);
             }
+        });
+
+        // 7. BIBLIOTHEK INPUT HANDLER (Neu hinzugefügt)
+        libraryInput.addEventListener('change', async function(e) {
+            if (e.target.files.length === 0) return;
+            if (!currentFolderId) return alert("Bitte zuerst ein Projekt wählen!");
+
+            const files = e.target.files;
+            
+            for (let i = 0; i < files.length; i++) {
+                const file = files[i];
+                
+                // Extrahiere den ursprünglichen Zeitstempel der Datei (letzte Änderung)
+                const fileDate = new Date(file.lastModified);
+                const timestampStr = getFormattedTimestamp(fileDate);
+                
+                // Bestimme die Dateiendung (z.B. jpg, mp4)
+                const extension = file.name.split('.').pop() || (file.type.includes('video') ? 'mp4' : 'jpg');
+                
+                // Unterscheidung ob Bild oder Video für die Namensgebung
+                let prefix = "BIBLIOTHEK_FOTO_";
+                if (file.type.startsWith('video/')) {
+                    prefix = "BIBLIOTHEK_VIDEO_";
+                }
+                
+                const newFilename = `${prefix}${timestampStr}.${extension}`;
+                
+                // Dateien nacheinander hochladen
+                await uploadToDrive(file, newFilename, file.type);
+            }
+            
+            // Input zurücksetzen, damit dieselbe Datei direkt nochmal gewählt werden kann
+            libraryInput.value = "";
         });
 
         window.onload = checkAuth;
