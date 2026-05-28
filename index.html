@@ -69,7 +69,7 @@
                 <input type="file" id="photoInput" accept="image/*" capture="environment" class="hidden">
 
                 <button class="media-btn" id="videoBtn">🎥 Video machen</button>
-                <input type="file" id="videoInput" accept="video/*" capture="environment" class="hidden">
+                <input type="file" id="videoInput" accept="video/*" capture="environment" quality="high" class="hidden">
 
                 <button class="media-btn" id="audioBtn">🎙️ Sprachnachricht starten</button>
             </div>
@@ -85,12 +85,11 @@
         const SCOPES = 'https://www.googleapis.com/auth/drive.file'; 
 
         let accessToken = null;
-        let rootFolderId = null; // ID des Hauptordners "Claud.ios"
+        let rootFolderId = null; 
         let currentFolderId = null;
         let mediaRecorder = null;
         let audioChunks = [];
         
-        // Zeitstempel-Zwischenspeicher für duale Timestamps
         let videoStartTime = null;
         let audioStartTime = null;
 
@@ -127,7 +126,6 @@
         // 1b. HAUPTORDNER "Claud.ios" SUCHEN ODER ERSTELLEN
         async function initRootFolder() {
             try {
-                // Suche nach existierendem Ordner "Claud.ios"
                 const response = await fetch(`https://www.googleapis.com/drive/v3/files?q=name='Claud.ios' and mimeType='application/vnd.google-apps.folder' and trashed=false&fields=files(id)`, {
                     headers: { 'Authorization': `Bearer ${accessToken}` }
                 });
@@ -137,7 +135,6 @@
                     rootFolderId = data.files[0].id;
                     loadProjects();
                 } else {
-                    // Ordner existiert nicht -> Erstellen
                     statusDiv.innerText = "Erstelle Hauptordner 'Claud.ios'...";
                     const createResp = await fetch('https://www.googleapis.com/drive/v3/files', {
                         method: 'POST',
@@ -164,7 +161,6 @@
         async function loadProjects() {
             statusDiv.innerText = "Lade Claud.ios Projekte...";
             try {
-                // Holt nur Ordner, die sich im "Claud.ios"-Hauptordner befinden
                 const response = await fetch(`https://www.googleapis.com/drive/v3/files?q='${rootFolderId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false&fields=files(id, name)`, {
                     headers: { 'Authorization': `Bearer ${accessToken}` }
                 });
@@ -214,7 +210,7 @@
                     body: JSON.stringify({
                         name: name,
                         mimeType: 'application/vnd.google-apps.folder',
-                        parents: [rootFolderId] // Ordner wird in Claud.ios abgelegt
+                        parents: [rootFolderId]
                     })
                 });
 
@@ -288,7 +284,7 @@
         }
 
         // 5. MEDIA INPUT HANDLER
-        // FOTO (Ein Zeitstempel reicht)
+        // FOTO (Lädt die Datei unkomprimiert im Originalzustand hoch)
         document.getElementById('photoInput').addEventListener('change', function(e) {
             if (e.target.files.length === 0) return;
             const file = e.target.files[0];
@@ -296,10 +292,10 @@
             uploadToDrive(file, name, file.type);
         });
 
-        // VIDEO (Erfassung von Start und Ende)
+        // VIDEO (Erfassung von Start und Ende + Qualitätssignal)
         videoBtn.addEventListener('click', () => {
             if (!currentFolderId) return alert("Bitte zuerst ein Projekt wählen!");
-            videoStartTime = new Date(); // Startzeit merken, wenn der Nutzer den Auswahldialog öffnet
+            videoStartTime = new Date(); 
             document.getElementById('videoInput').click();
         });
 
@@ -315,7 +311,7 @@
             uploadToDrive(file, name, file.type);
         });
 
-        // 6. SPRACHNACHRICHT-LOGIK (Speichert als echte .wav Datei)
+        // 6. SPRACHNACHRICHT-LOGIK (Zurück auf m4a für volle Smartphone-Kompatibilität)
         audioBtn.addEventListener('click', async () => {
             if (!currentFolderId) return alert("Bitte zuerst ein Projekt wählen!");
 
@@ -326,23 +322,23 @@
 
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                audioStartTime = new Date(); // Startzeitpunkt festhalten
+                audioStartTime = new Date(); 
                 
-                // Erstellt den Recorder im WAV-Format (audio/wav wird von modernen Systemen unterstützt)
-                mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/wav' });
+                // .m4a (bzw. audio/mp4/webm) wird plattformübergreifend nativ unterstützt
+                mediaRecorder = new MediaRecorder(stream);
                 audioChunks = [];
 
                 mediaRecorder.ondataavailable = (e) => audioChunks.push(e.data);
                 
                 mediaRecorder.onstop = () => {
-                    const audioEndTime = new Date(); // Endzeitpunkt festhalten
-                    const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+                    const audioEndTime = new Date(); 
+                    const audioBlob = new Blob(audioChunks, { type: 'audio/m4a' });
                     
                     const startStr = getFormattedTimestamp(audioStartTime);
                     const endStr = getFormattedTimestamp(audioEndTime);
-                    const name = `AUDIO_START_${startStr}__ENDE_${endStr}.wav`;
+                    const name = `AUDIO_START_${startStr}__ENDE_${endStr}.m4a`;
                     
-                    uploadToDrive(audioBlob, name, 'audio/wav');
+                    uploadToDrive(audioBlob, name, 'audio/m4a');
                     
                     audioBtn.innerText = "🎙️ Sprachnachricht starten";
                     audioBtn.style.background = "#2c2c2e";
@@ -352,9 +348,9 @@
                 mediaRecorder.start();
                 audioBtn.innerText = "🛑 Aufnahme stoppen...";
                 audioBtn.style.background = "#ff3b30";
-                statusDiv.innerText = "Nehme WAV-Audio auf...";
+                statusDiv.innerText = "Nehme Audio auf...";
             } catch (err) {
-                alert("Mikrofon-Zugriff verweigert oder WAV wird nicht unterstützt.");
+                alert("Mikrofon-Zugriff verweigert oder Audio-Format wird nicht unterstützt.");
                 console.error(err);
             }
         });
